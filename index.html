@@ -1038,7 +1038,7 @@
                 <div class="wallet-section">
                     <div class="wallet-title">💰 BSC链 USDT 收款地址</div>
                     <div class="wallet-address">
-                        <input type="text" id="walletAddress" value="0xead8c64f073580fa23831cdbdac19ffb7909b9c4" readonly>
+                        <input type="text" id="walletAddress" value="0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb" readonly>
                         <button class="btn-copy" onclick="copyWallet()">复制</button>
                     </div>
                     <p style="color: #a0aec0; font-size: 0.85rem; margin-top: 10px;">
@@ -1086,8 +1086,8 @@
 
                 <div class="contact-info">
                     <p>💬 客服联系方式</p>
-                    <p><strong>X：@btc_tigerx</strong></p>
-                    <p><strong>Telegram：@btc_bulla</strong></p>
+                    <p><strong>微信：YourWeChatID</strong></p>
+                    <p><strong>Telegram：@YourTelegramID</strong></p>
                     <p style="margin-top: 15px; font-size: 0.85rem; color: #a0aec0;">
                         激活通常在10分钟内完成<br>
                         遇到问题请联系客服
@@ -1321,7 +1321,7 @@
         const db = firebase.firestore();
 
         // 管理员邮箱（首个注册用户自动成为管理员）
-        const ADMIN_EMAIL = 'b857455132@gmail.com'; // 修改为你的管理员邮箱
+        const ADMIN_EMAIL = 'b857455132@gmail.com'; // ✅ 已配置管理员邮箱 // 修改为你的管理员邮箱
 
         // 20个指标配置
         const indicators = {
@@ -1424,30 +1424,40 @@
         auth.onAuthStateChanged(async (user) => {
             if (user) {
                 currentUser = user;
-                const userDoc = await db.collection('users').doc(user.uid).get();
+                const userDocRef = db.collection('users').doc(user.uid);
+                const userDoc = await userDocRef.get();
                 
                 if (!userDoc.exists) {
-                    // 创建用户文档
-                    await db.collection('users').doc(user.uid).set({
+                    // 创建用户文档（新注册用户自动获得7天试用）
+                    const isFirstUser = (await db.collection('users').get()).empty;
+                    await userDocRef.set({
                         email: user.email,
-                        role: 'user',
-                        isPaid: false,
-                        subscriptionType: null,
-                        expiryDate: null,
+                        role: isFirstUser || user.email === ADMIN_EMAIL ? 'admin' : 'user',
+                        isPaid: true,  // 新用户自动试用
+                        isTrial: true,
+                        subscriptionType: 'trial',
+                        expiryDate: firebase.firestore.Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
                         createdAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
+                    alert('🎉 注册成功！您已获得7天免费试用！');
                 }
 
-                const userData = userDoc.data();
+                let userData = userDoc.exists ? userDoc.data() : (await userDocRef.get()).data();
+                
+                // ✅ 关键修复：自动升级管理员权限
+                if (user.email === ADMIN_EMAIL && (!userData || userData.role !== 'admin')) {
+                    await userDocRef.update({ role: 'admin' });
+                    userData.role = 'admin';
+                }
                 
                 // 隐藏登录界面
                 document.getElementById('loginContainer').classList.add('hidden');
                 
-                // 根据角色和付费状态显示不同界面
-                if (userData.role === 'admin') {
+                // ✅ 关键修复：优先检查管理员身份（邮箱或role）
+                if (user.email === ADMIN_EMAIL || (userData && userData.role === 'admin')) {
                     // 显示管理员界面
                     showAdminInterface(user.email);
-                } else if (userData.isPaid && userData.expiryDate) {
+                } else if (userData && userData.isPaid && userData.expiryDate) {
                     // 检查是否过期
                     const expiryDate = userData.expiryDate.toDate();
                     if (expiryDate > new Date()) {
